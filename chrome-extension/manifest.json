@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Reader Selection to Google Translate",
+  "version": "0.6.0",
+  "description": "Automatically send selected text from the local EPUB reader to the nearest Google Translate tab.",
+  "permissions": [
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*",
+    "file:///*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

@@ -1,0 +1,1270 @@
+<!doctype html>
+<html lang="en" data-selection-translate-reader="true">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sonmi-reader</title>
+
+    <script>
+      document.documentElement.setAttribute(
+        "data-selection-translate-reader",
+        "true",
+      );
+      localStorage.setItem(
+        "local-epub-reader-selection-translate-enabled",
+        "true",
+      );
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+
+    <style>
+      :root {
+        --bg: #f3efe6;
+        --panel: #ffffff;
+        --text: #1f1f1f;
+        --muted: #666;
+        --border: #d8d1c5;
+        --accent: #2d5f8b;
+        --danger: #9b2f2f;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        overflow: hidden;
+      }
+
+      .app {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        height: 100vh;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+        box-sizing: border-box;
+      }
+
+      .toolbar button {
+        border: 1px solid var(--border);
+        background: #fff;
+        padding: 7px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .toolbar button:hover {
+        border-color: var(--accent);
+      }
+
+      .toolbar button:disabled {
+        opacity: 0.35;
+        cursor: default;
+        pointer-events: none;
+      }
+
+      .toolbar button.danger:hover {
+        border-color: var(--danger);
+        color: var(--danger);
+      }
+
+      .brand {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .title {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      #viewerShell {
+        position: relative;
+        height: 100%;
+        min-height: 0;
+        width: 100%;
+        max-width: 100vw;
+        overflow: hidden;
+        background: var(--bg);
+        box-sizing: border-box;
+      }
+
+      #bookArea {
+        height: 100%;
+        width: min(100%, 920px);
+        margin: 0 auto;
+        overflow: hidden;
+        box-sizing: border-box;
+        background: var(--bg);
+      }
+
+      #bookArea iframe {
+        display: block !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        background: var(--bg) !important;
+      }
+
+      .empty {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: var(--muted);
+        padding: 20px;
+        box-sizing: border-box;
+        z-index: 5;
+        background: var(--bg);
+      }
+
+      .empty strong {
+        color: var(--text);
+      }
+
+      .empty .note {
+        max-width: 680px;
+        line-height: 1.5;
+        margin-top: 10px;
+        font-size: 14px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .bottom-nav {
+        position: fixed;
+        right: 18px;
+        bottom: 38px;
+        z-index: 20;
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
+        backdrop-filter: blur(6px);
+      }
+
+      .bottom-nav button {
+        border: 1px solid var(--border);
+        background: #fff;
+        padding: 8px 12px;
+        border-radius: 7px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .bottom-nav button:hover {
+        border-color: var(--accent);
+      }
+
+      #selectionBridge {
+        position: fixed;
+        left: -10000px;
+        top: -10000px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        white-space: pre-wrap;
+        user-select: text;
+      }
+
+      .footer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 30px 8px 12px;
+        background: var(--panel);
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 13px;
+        box-sizing: border-box;
+      }
+
+      .progress-wrap {
+        position: relative;
+        flex: 1;
+        height: 8px;
+        background: #e1dbcf;
+        border-radius: 999px;
+        cursor: pointer;
+        touch-action: none;
+      }
+
+      .progress-bar {
+        width: 0%;
+        height: 100%;
+        background: var(--accent);
+        border-radius: 999px;
+        pointer-events: none;
+      }
+
+      .progress-knob {
+        position: absolute;
+        top: 50%;
+        left: 0%;
+        width: 14px;
+        height: 14px;
+        margin-left: -7px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        transform: translateY(-50%);
+        pointer-events: none;
+        transition: left 0.05s linear;
+      }
+
+      .seek-tooltip {
+        position: absolute;
+        bottom: 16px;
+        left: 0%;
+        transform: translateX(-50%);
+        background: var(--accent);
+        color: #fff;
+        font-size: 12px;
+        padding: 3px 7px;
+        border-radius: 5px;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 30;
+      }
+
+      #pageText {
+        white-space: nowrap;
+      }
+
+      @media (max-width: 760px) {
+        .toolbar {
+          flex-wrap: wrap;
+        }
+
+        .title {
+          flex-basis: 100%;
+          order: 10;
+        }
+
+        #bookArea {
+          width: 100%;
+        }
+
+        .bottom-nav {
+          right: 10px;
+          bottom: 44px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="toolbar">
+        <button id="openBtn" type="button">Open EPUB</button>
+        <button id="reopenBtn" type="button" disabled>Open: —</button>
+        <div id="bookTitle" class="title">Sonmi-reader</div>
+      </div>
+
+      <main id="viewerShell">
+        <div id="bookArea"></div>
+
+        <div id="emptyState" class="empty">
+          <div>
+            <strong>Select an EPUB file.</strong>
+            <div class="note">
+              The reader stores a browser file handle and reading progress. EPUB
+              content is not stored in IndexedDB. Progress is restored by saved
+              percentage after the book is loaded.
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <div class="bottom-nav">
+        <button id="prevBtn" type="button">← Previous</button>
+        <button id="nextBtn" type="button">Next →</button>
+      </div>
+
+      <div id="selectionBridge" aria-hidden="true"></div>
+
+      <div class="footer">
+        <span id="locationText">0%</span>
+        <span id="pageText">Page 0 / 0</span>
+        <div
+          class="progress-wrap"
+          id="progressWrap"
+          title="Drag to jump to a position"
+        >
+          <div id="progressBar" class="progress-bar"></div>
+          <div id="progressKnob" class="progress-knob"></div>
+          <div id="seekTooltip" class="seek-tooltip hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const DB_NAME = "local-epub-reader-handle-db-v5";
+      const DB_VERSION = 1;
+      const STORE_NAME = "reader-state";
+      const STATE_KEY = "last-book-state";
+      const PROGRESS_STORAGE_KEY = "local-epub-reader-progress-v13";
+
+      const openBtn = document.getElementById("openBtn");
+      const reopenBtn = document.getElementById("reopenBtn");
+      const bookArea = document.getElementById("bookArea");
+      const emptyState = document.getElementById("emptyState");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const bookTitleEl = document.getElementById("bookTitle");
+      const locationText = document.getElementById("locationText");
+      const pageText = document.getElementById("pageText");
+      const progressBar = document.getElementById("progressBar");
+      const progressWrap = document.getElementById("progressWrap");
+      const progressKnob = document.getElementById("progressKnob");
+      const seekTooltip = document.getElementById("seekTooltip");
+      const selectionBridge = document.getElementById("selectionBridge");
+
+      let db;
+      let book = null;
+      let rendition = null;
+      let currentCfi = null;
+      let currentFileName = null;
+      let currentFileIdentity = null;
+      let currentHandle = null;
+      let saveTimer = null;
+      let lastBridgeText = "";
+      let lastBridgeAt = 0;
+      let pendingSelectionText = "";
+      let bridgeMouseDown = false;
+      let bridgeSendTimer = null;
+
+      let currentPercent = 0;
+      let currentPage = 0;
+      let totalPages = 0;
+      let isRestoringProgress = false;
+      let isHandlingResize = false;
+      let ignoreRelocatedUntil = 0;
+      let resizeTimer = null;
+
+      let stableCfi = null;
+      let stablePercent = 0;
+      let stablePage = 0;
+
+      let hasUnsavedNavigation = false;
+
+      function supportsFileSystemAccess() {
+        return "showOpenFilePicker" in window;
+      }
+
+      function fileBasename(fileName) {
+        return (fileName || "").replace(/\.[^.]+$/, "");
+      }
+
+      function updateReopenButton(fileName) {
+        const name = fileBasename(fileName);
+        reopenBtn.textContent = name ? "Open prev: " + name : "Open prev";
+        reopenBtn.disabled = false;
+      }
+
+      function setStatus(text) {}
+
+      function delay(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      function openDb() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+          request.onupgradeneeded = () => {
+            const database = request.result;
+            if (!database.objectStoreNames.contains(STORE_NAME)) {
+              database.createObjectStore(STORE_NAME);
+            }
+          };
+
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      function dbGet(key) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readonly");
+          const store = tx.objectStore(STORE_NAME);
+          const request = store.get(key);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      function dbSet(key, value) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          const store = tx.objectStore(STORE_NAME);
+          const request = store.put(value, key);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      function dbDelete(key) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          const store = tx.objectStore(STORE_NAME);
+          const request = store.delete(key);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      function makeFileIdentity(file) {
+        return [file.name, file.size, file.lastModified].join("::");
+      }
+
+      function getProgressMap() {
+        try {
+          return JSON.parse(localStorage.getItem(PROGRESS_STORAGE_KEY)) || {};
+        } catch {
+          return {};
+        }
+      }
+
+      function setProgressMap(progressMap) {
+        localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(progressMap));
+      }
+
+      function getSavedProgress(fileIdentity) {
+        if (!fileIdentity) return null;
+        const progressMap = getProgressMap();
+        return progressMap[fileIdentity] || null;
+      }
+
+      function saveProgressToLocalStorage() {
+        if (!currentFileIdentity || isRestoringProgress) return;
+        if (!Number.isFinite(currentPercent)) return;
+
+        const progressMap = getProgressMap();
+        progressMap[currentFileIdentity] = {
+          fileName: currentFileName,
+          percent: currentPercent,
+          page: currentPage,
+          totalPages,
+          cfi: currentCfi,
+          updatedAt: Date.now(),
+        };
+        setProgressMap(progressMap);
+      }
+
+      function deleteCurrentProgress() {
+        if (!currentFileIdentity) return;
+        const progressMap = getProgressMap();
+        delete progressMap[currentFileIdentity];
+        setProgressMap(progressMap);
+      }
+
+      function updateProgressUI(percent, page, total) {
+        const safePercent = Math.max(
+          0,
+          Math.min(100, Math.round(percent || 0)),
+        );
+        locationText.textContent = safePercent + "%";
+        progressBar.style.width = safePercent + "%";
+        progressKnob.style.left = safePercent + "%";
+        pageText.textContent =
+          total > 0 ? `Page ${page} / ${total}` : "Page 0 / 0";
+      }
+
+      function markStableLocation() {
+        if (!currentCfi) return;
+        stableCfi = currentCfi;
+        stablePercent = currentPercent;
+        stablePage = currentPage;
+      }
+
+      async function restoreStableLocationAfterResize() {
+        if (!rendition || !stableCfi) return;
+
+        isHandlingResize = true;
+        ignoreRelocatedUntil = Date.now() + 2500;
+
+        try {
+          await delay(120);
+          await rendition.display(stableCfi);
+          await delay(250);
+
+          currentCfi = stableCfi;
+          currentPercent = stablePercent;
+          currentPage = stablePage;
+          updateProgressUI(stablePercent, stablePage, totalPages);
+          hasUnsavedNavigation = true;
+          setStatus("Position kept after resize");
+        } catch (error) {
+          console.warn("Failed to keep position after resize:", error);
+          setStatus("Resize position restore failed");
+        } finally {
+          isHandlingResize = false;
+          ignoreRelocatedUntil = 0;
+          scheduleSave();
+        }
+      }
+
+      async function verifyPermission(fileHandle) {
+        if (
+          (await fileHandle.queryPermission({ mode: "read" })) === "granted"
+        ) {
+          return true;
+        }
+
+        if (
+          (await fileHandle.requestPermission({ mode: "read" })) === "granted"
+        ) {
+          return true;
+        }
+
+        return false;
+      }
+
+      function destroyCurrentBook() {
+        clearTimeout(saveTimer);
+        clearTimeout(bridgeSendTimer);
+
+        if (rendition) {
+          rendition.destroy();
+          rendition = null;
+        }
+
+        if (book) {
+          book.destroy();
+          book = null;
+        }
+
+        bookArea.innerHTML = "";
+        currentCfi = null;
+        stableCfi = null;
+        stablePercent = 0;
+        stablePage = 0;
+        isRestoringProgress = false;
+        isHandlingResize = false;
+        ignoreRelocatedUntil = 0;
+        hasUnsavedNavigation = false;
+        clearTimeout(resizeTimer);
+      }
+
+      function scheduleSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          saveState();
+          saveProgressToLocalStorage();
+          hasUnsavedNavigation = false;
+        }, 350);
+      }
+
+      async function saveState() {
+        if (!currentHandle || !currentFileName || !currentFileIdentity) return;
+
+        await dbSet(STATE_KEY, {
+          fileName: currentFileName,
+          fileIdentity: currentFileIdentity,
+          fileHandle: currentHandle,
+          updatedAt: Date.now(),
+        });
+      }
+
+      function flushSaveNow() {
+        clearTimeout(saveTimer);
+
+        if (!hasUnsavedNavigation) {
+          saveState();
+          return;
+        }
+
+        syncLocationFromRendition();
+        saveProgressToLocalStorage();
+        saveState();
+        hasUnsavedNavigation = false;
+      }
+
+      function queueSelectionForBridge(text) {
+        const cleaned = (text || "").trim();
+        if (!cleaned || cleaned.length < 2) return;
+        pendingSelectionText = cleaned;
+
+        clearTimeout(bridgeSendTimer);
+        bridgeSendTimer = setTimeout(() => {
+          if (!bridgeMouseDown) {
+            flushSelectionBridge();
+          }
+        }, 700);
+      }
+
+      function flushSelectionBridge() {
+        const cleaned = (pendingSelectionText || "").trim();
+        pendingSelectionText = "";
+
+        if (!cleaned || cleaned.length < 2) return;
+
+        const now = Date.now();
+        if (cleaned === lastBridgeText && now - lastBridgeAt < 2000) return;
+
+        lastBridgeText = cleaned;
+        lastBridgeAt = now;
+
+        selectionBridge.textContent = cleaned;
+
+        const range = document.createRange();
+        range.selectNodeContents(selectionBridge);
+
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
+        document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+
+        setTimeout(() => {
+          const currentSelection = window.getSelection();
+          if (
+            currentSelection &&
+            currentSelection.toString().trim() === cleaned
+          ) {
+            currentSelection.removeAllRanges();
+          }
+        }, 500);
+      }
+
+      async function loadFromFileHandle(
+        fileHandle,
+        savedIdentityFromDb = null,
+      ) {
+        const hasPermission = await verifyPermission(fileHandle);
+
+        if (!hasPermission) {
+          setStatus("Permission denied");
+          alert(
+            "Browser did not get access to the saved EPUB file. Open the file manually again.",
+          );
+          return;
+        }
+
+        const file = await fileHandle.getFile();
+
+        if (!file.name.toLowerCase().endsWith(".epub")) {
+          alert("Selected file is not an .epub file.");
+          return;
+        }
+
+        const fileIdentity = makeFileIdentity(file);
+        const arrayBuffer = await file.arrayBuffer();
+
+        await loadBookFromArrayBuffer(
+          arrayBuffer,
+          file.name,
+          fileHandle,
+          fileIdentity || savedIdentityFromDb,
+        );
+      }
+
+      async function waitForContentLayout() {
+        try {
+          const contents =
+            rendition && rendition.getContents ? rendition.getContents() : null;
+          const list = Array.isArray(contents)
+            ? contents
+            : contents
+              ? [contents]
+              : [];
+          await Promise.all(
+            list.map((c) => {
+              const doc = c && c.document;
+              return doc && doc.fonts && doc.fonts.ready
+                ? doc.fonts.ready
+                : Promise.resolve();
+            }),
+          );
+        } catch (error) {}
+      }
+
+      async function buildLocationsWithFallback(bookInstance) {
+        try {
+          await bookInstance.ready;
+          await bookInstance.locations.generate(1200);
+          return bookInstance.locations.length();
+        } catch (error) {
+          console.warn("Locations generation failed:", error);
+          return 0;
+        }
+      }
+
+      function syncLocationFromRendition() {
+        if (!rendition) return;
+
+        let loc;
+        try {
+          loc = rendition.currentLocation();
+        } catch (error) {
+          return;
+        }
+
+        if (!loc || !loc.start || !loc.start.cfi) return;
+
+        currentCfi = loc.start.cfi;
+
+        if (book && book.locations && book.locations.length()) {
+          totalPages = book.locations.length();
+
+          const percentage = book.locations.percentageFromCfi(currentCfi);
+          if (typeof percentage === "number" && !Number.isNaN(percentage)) {
+            currentPercent = Math.max(0, Math.min(100, percentage * 100));
+          }
+
+          const locIndex =
+            typeof loc.start.location === "number"
+              ? loc.start.location
+              : book.locations.locationFromCfi(currentCfi);
+
+          if (typeof locIndex === "number" && locIndex >= 0) {
+            currentPage = Math.min(totalPages, Math.max(1, locIndex + 1));
+          }
+        }
+
+        updateProgressUI(currentPercent, currentPage, totalPages);
+      }
+
+      async function loadBookFromArrayBuffer(
+        arrayBuffer,
+        fileName,
+        fileHandle,
+        fileIdentity,
+      ) {
+        destroyCurrentBook();
+
+        emptyState.classList.add("hidden");
+        currentFileName = fileName;
+        currentFileIdentity = fileIdentity;
+        currentHandle = fileHandle;
+        bookTitleEl.textContent = "Sonmi-reader";
+        setStatus("Loading...");
+
+        book = ePub(arrayBuffer);
+
+        const savedProgress = getSavedProgress(fileIdentity);
+        const hasSavedTarget = !!(
+          savedProgress &&
+          (savedProgress.cfi ||
+            (typeof savedProgress.percent === "number" &&
+              savedProgress.percent > 0))
+        );
+
+        isRestoringProgress = true;
+        ignoreRelocatedUntil = Date.now() + 4000;
+
+        rendition = book.renderTo(bookArea, {
+          width: "100%",
+          height: "100%",
+          spread: "none",
+          flow: "paginated",
+          manager: "default",
+        });
+
+        rendition.themes.default({
+          body: {
+            "font-family": "Georgia, serif",
+            "font-size": "30px!important",
+            "line-height": "1.65",
+            color: "#1f1f1f",
+            background: "#f3efe6",
+            padding: "24px 42px 45px 42px !important",
+            "box-sizing": "border-box !important",
+            "overflow-x": "hidden !important",
+          },
+          "p, div, section, article, blockquote, li": {
+            "max-width": "100% !important",
+            "box-sizing": "border-box !important",
+            "overflow-wrap": "break-word !important",
+          },
+          "img, svg, table": {
+            "max-width": "100% !important",
+            height: "auto !important",
+          },
+          "pre, code": {
+            "white-space": "pre-wrap !important",
+            "overflow-wrap": "break-word !important",
+          },
+          "::selection": {
+            background: "#c7ddff",
+          },
+        });
+
+        rendition.on("relocated", (location) => {
+          const relocatedDuringProtectedPhase =
+            isRestoringProgress ||
+            isHandlingResize ||
+            Date.now() <= ignoreRelocatedUntil;
+          const nextCfi = location.start.cfi;
+
+          const percentage =
+            book.locations && book.locations.length()
+              ? book.locations.percentageFromCfi(nextCfi)
+              : null;
+
+          if (typeof percentage === "number" && !Number.isNaN(percentage)) {
+            const nextPercent = Math.max(0, Math.min(100, percentage * 100));
+            const nextTotalPages = book.locations.length();
+            const nextPage =
+              typeof location.start.location === "number"
+                ? Math.min(
+                    nextTotalPages,
+                    Math.max(1, location.start.location + 1),
+                  )
+                : Math.max(1, Math.round((nextPercent / 100) * nextTotalPages));
+
+            if (!relocatedDuringProtectedPhase) {
+              currentCfi = nextCfi;
+              currentPercent = nextPercent;
+              totalPages = nextTotalPages;
+              currentPage = nextPage;
+              updateProgressUI(currentPercent, currentPage, totalPages);
+              markStableLocation();
+              hasUnsavedNavigation = true;
+              scheduleSave();
+            }
+          } else if (!relocatedDuringProtectedPhase) {
+            currentCfi = nextCfi;
+            locationText.textContent = "Position saved";
+            markStableLocation();
+            hasUnsavedNavigation = true;
+            scheduleSave();
+          }
+        });
+
+        rendition.on("selected", (cfiRange, contents) => {
+          const text =
+            contents && contents.window && contents.window.getSelection
+              ? contents.window.getSelection().toString()
+              : "";
+
+          queueSelectionForBridge(text);
+        });
+
+        rendition.on("rendered", (section, view) => {
+          const doc = view && view.document;
+          if (!doc || !doc.body) return;
+
+          doc.body.style.boxSizing = "border-box";
+          doc.body.style.overflowX = "hidden";
+          doc.body.style.paddingBottom = "10px";
+
+          doc.addEventListener(
+            "mousedown",
+            () => {
+              bridgeMouseDown = true;
+              pendingSelectionText = "";
+              clearTimeout(bridgeSendTimer);
+            },
+            true,
+          );
+
+          doc.addEventListener(
+            "mouseup",
+            () => {
+              bridgeMouseDown = false;
+
+              const text =
+                doc.defaultView && doc.defaultView.getSelection
+                  ? doc.defaultView.getSelection().toString()
+                  : "";
+
+              queueSelectionForBridge(text);
+              flushSelectionBridge();
+            },
+            true,
+          );
+
+          doc.addEventListener(
+            "pointerup",
+            () => {
+              bridgeMouseDown = false;
+
+              const text =
+                doc.defaultView && doc.defaultView.getSelection
+                  ? doc.defaultView.getSelection().toString()
+                  : "";
+
+              queueSelectionForBridge(text);
+              flushSelectionBridge();
+            },
+            true,
+          );
+
+          doc.addEventListener(
+            "touchend",
+            () => {
+              bridgeMouseDown = false;
+
+              const text =
+                doc.defaultView && doc.defaultView.getSelection
+                  ? doc.defaultView.getSelection().toString()
+                  : "";
+
+              queueSelectionForBridge(text);
+              setTimeout(flushSelectionBridge, 100);
+            },
+            true,
+          );
+        });
+
+        totalPages = await buildLocationsWithFallback(book);
+
+        let targetCfi = null;
+        if (savedProgress && savedProgress.cfi) {
+          targetCfi = savedProgress.cfi;
+        } else if (
+          savedProgress &&
+          typeof savedProgress.percent === "number" &&
+          savedProgress.percent > 0 &&
+          book.locations &&
+          book.locations.length()
+        ) {
+          const normalized = Math.max(
+            0,
+            Math.min(1, savedProgress.percent / 100),
+          );
+          targetCfi = book.locations.cfiFromPercentage(normalized) || null;
+        }
+
+        try {
+          if (targetCfi) {
+            await rendition.display(targetCfi);
+            await waitForContentLayout();
+            await delay(80);
+            await rendition.display(targetCfi);
+            await waitForContentLayout();
+          } else {
+            await rendition.display();
+            await waitForContentLayout();
+          }
+        } catch (error) {
+          console.warn("Primary display target failed, recovering:", error);
+
+          let recovered = false;
+
+          if (
+            savedProgress &&
+            typeof savedProgress.percent === "number" &&
+            savedProgress.percent > 0 &&
+            book.locations &&
+            book.locations.length()
+          ) {
+            try {
+              const normalized = Math.max(
+                0,
+                Math.min(1, savedProgress.percent / 100),
+              );
+              const fallbackCfi = book.locations.cfiFromPercentage(normalized);
+              if (fallbackCfi) {
+                await rendition.display(fallbackCfi);
+                await waitForContentLayout();
+                recovered = true;
+              }
+            } catch (fallbackError) {
+              console.warn("Percentage fallback failed:", fallbackError);
+            }
+          }
+
+          if (!recovered) {
+            try {
+              await rendition.display();
+              await waitForContentLayout();
+            } catch (startError) {
+              console.warn("Failed to open book:", startError);
+              isRestoringProgress = false;
+              ignoreRelocatedUntil = 0;
+              setStatus("Open error");
+              alert("Could not display EPUB file.");
+              return;
+            }
+          }
+        }
+
+        await delay(200);
+
+        syncLocationFromRendition();
+
+        if (
+          savedProgress &&
+          savedProgress.cfi &&
+          targetCfi === savedProgress.cfi &&
+          Number.isFinite(savedProgress.percent) &&
+          Math.abs(currentPercent - savedProgress.percent) <= 1.0
+        ) {
+          currentPercent = savedProgress.percent;
+          if (Number.isFinite(savedProgress.page) && savedProgress.page > 0)
+            currentPage = savedProgress.page;
+          updateProgressUI(currentPercent, currentPage, totalPages);
+        }
+
+        isRestoringProgress = false;
+        ignoreRelocatedUntil = 0;
+        markStableLocation();
+
+        setStatus("Book opened");
+
+        await saveState();
+        saveProgressToLocalStorage();
+        updateReopenButton(fileName);
+      }
+
+      async function chooseFile() {
+        if (!supportsFileSystemAccess()) {
+          alert(
+            "Your browser does not support File System Access API. Use Chrome/Edge Chromium.",
+          );
+          return;
+        }
+
+        try {
+          const [fileHandle] = await window.showOpenFilePicker({
+            multiple: false,
+            types: [
+              {
+                description: "EPUB books",
+                accept: {
+                  "application/epub+zip": [".epub"],
+                },
+              },
+            ],
+          });
+
+          await loadFromFileHandle(fileHandle);
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+          console.error(error);
+          setStatus("Open error");
+          alert("Could not open EPUB file.");
+        }
+      }
+
+      async function restoreLastBook({ userInitiated = false } = {}) {
+        const saved = await dbGet(STATE_KEY);
+
+        if (!saved || !saved.fileHandle) {
+          setStatus("Ready");
+          return;
+        }
+
+        updateReopenButton(saved.fileName);
+
+        const permission = await saved.fileHandle.queryPermission({
+          mode: "read",
+        });
+
+        if (permission !== "granted" && !userInitiated) {
+          return;
+        }
+
+        setStatus("Requesting access to saved file...");
+
+        try {
+          await loadFromFileHandle(
+            saved.fileHandle,
+            saved.fileIdentity || null,
+          );
+        } catch (error) {
+          console.error(error);
+          setStatus("Could not reopen saved file");
+          alert(
+            "Could not reopen the saved file. The file may have been moved, renamed, deleted, or permission was denied.",
+          );
+        }
+      }
+
+      openBtn.addEventListener("click", chooseFile);
+      reopenBtn.addEventListener("click", () =>
+        restoreLastBook({ userInitiated: true }),
+      );
+
+      prevBtn.addEventListener("click", () => {
+        if (rendition) rendition.prev();
+      });
+
+      nextBtn.addEventListener("click", () => {
+        if (rendition) rendition.next();
+      });
+
+      let isSeeking = false;
+
+      function canSeek() {
+        return !!(
+          rendition &&
+          book &&
+          book.locations &&
+          book.locations.length()
+        );
+      }
+
+      function percentFromPointer(event) {
+        const rect = progressWrap.getBoundingClientRect();
+        if (rect.width <= 0) return 0;
+        const x = event.clientX - rect.left;
+        return Math.max(0, Math.min(100, (x / rect.width) * 100));
+      }
+
+      function showSeekPreview(percent) {
+        const clamped = Math.max(0, Math.min(100, percent));
+        progressBar.style.width = clamped + "%";
+        progressKnob.style.left = clamped + "%";
+        seekTooltip.style.left = clamped + "%";
+
+        const total = book.locations.length();
+        const page = Math.max(
+          1,
+          Math.min(total, Math.round((clamped / 100) * total)),
+        );
+        seekTooltip.textContent =
+          Math.round(clamped) + "%  ·  p." + page + " / " + total;
+      }
+
+      async function seekToPercent(percent) {
+        if (!canSeek()) return;
+
+        const clamped = Math.max(0, Math.min(100, percent));
+        const cfi = book.locations.cfiFromPercentage(clamped / 100);
+        if (!cfi) return;
+
+        isRestoringProgress = true;
+        ignoreRelocatedUntil = Date.now() + 1500;
+        setStatus("Jumping to " + Math.round(clamped) + "%...");
+
+        try {
+          await rendition.display(cfi);
+          await delay(150);
+          syncLocationFromRendition();
+          markStableLocation();
+          hasUnsavedNavigation = true;
+          setStatus("Jumped to " + Math.round(currentPercent) + "%");
+        } catch (error) {
+          console.warn("Seek failed:", error);
+          setStatus("Could not jump to that position");
+          updateProgressUI(currentPercent, currentPage, totalPages);
+        } finally {
+          isRestoringProgress = false;
+          ignoreRelocatedUntil = 0;
+          scheduleSave();
+        }
+      }
+
+      progressWrap.addEventListener("pointerdown", (event) => {
+        if (!canSeek()) return;
+        isSeeking = true;
+        try {
+          progressWrap.setPointerCapture(event.pointerId);
+        } catch {}
+        seekTooltip.classList.remove("hidden");
+        showSeekPreview(percentFromPointer(event));
+      });
+
+      progressWrap.addEventListener("pointermove", (event) => {
+        if (!isSeeking) return;
+        showSeekPreview(percentFromPointer(event));
+      });
+
+      progressWrap.addEventListener("pointerup", async (event) => {
+        if (!isSeeking) return;
+        isSeeking = false;
+        try {
+          progressWrap.releasePointerCapture(event.pointerId);
+        } catch {}
+        seekTooltip.classList.add("hidden");
+        await seekToPercent(percentFromPointer(event));
+      });
+
+      progressWrap.addEventListener("pointercancel", () => {
+        if (!isSeeking) return;
+        isSeeking = false;
+        seekTooltip.classList.add("hidden");
+        updateProgressUI(currentPercent, currentPage, totalPages);
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (!rendition) return;
+
+        if (event.key === "ArrowLeft") {
+          rendition.prev();
+        }
+
+        if (event.key === "ArrowRight" || event.key === " ") {
+          event.preventDefault();
+          rendition.next();
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        if (!rendition || !stableCfi) return;
+
+        isHandlingResize = true;
+        ignoreRelocatedUntil = Date.now() + 2500;
+        clearTimeout(saveTimer);
+        clearTimeout(resizeTimer);
+
+        resizeTimer = setTimeout(() => {
+          restoreStableLocationAfterResize();
+        }, 350);
+      });
+
+      window.addEventListener("beforeunload", flushSaveNow);
+      window.addEventListener("pagehide", flushSaveNow);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") flushSaveNow();
+      });
+
+      (async function init() {
+        try {
+          db = await openDb();
+
+          if (!supportsFileSystemAccess()) {
+            setStatus("Chrome/Edge required for file handle mode");
+            alert(
+              "This version requires File System Access API. Open it in Chrome or Edge Chromium.",
+            );
+            return;
+          }
+
+          await restoreLastBook();
+        } catch (error) {
+          console.error(error);
+          setStatus("Storage error");
+          alert(
+            "Could not initialize local storage. Check browser permissions.",
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>
