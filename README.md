@@ -2,6 +2,8 @@
 
 A local EPUB reader for Chrome. Open `sonmi-reader.html` directly in the browser, pick an `.epub` file with the **Open EPUB** button — the reader saves your progress and resumes from the same position on the next launch. Any book language supported by Google Translate is supported.
 
+Watch the setup and usage guide on YouTube: https://youtu.be/vXxDXn13Zyo?si=TRuY8gFXQb0ykXzs
+
 ---
 
 ## Extension — what it does and how to install
